@@ -15,12 +15,6 @@
 <br>
 
 <p align="center">
-  ⚠️⚠️ Recommended for small or PoC projects, might not be optimized for large amounts of data. I suggest to use this on a free Spark plan, otherwise be extremely cautious. ⚠️⚠️
-</p>
-
-<br>
-
-<p align="center">
   <a href="https://pub.dartlang.org/packages/flutter_firebase_chat_core">
     <img alt="Pub" src="https://img.shields.io/pub/v/flutter_firebase_chat_core" />
   </a>
@@ -54,7 +48,7 @@ Flyer Chat is a platform for creating in-app chat experiences using Flutter or [
 
 ### Requirements
 
-`Dart >=2.16.0` and `Flutter >=2.0.0`, [Firebase](https://firebase.google.com) project.
+`Dart >=2.14.0` and `Flutter >=2.0.0`, [Firebase](https://firebase.google.com) project.
 
 Read our [documentation](https://docs.flyer.chat/flutter/firebase/firebase-overview) or see the [example](https://github.com/flyerhq/flutter_firebase_chat_core/tree/main/example) project. To run the example project you need to have your own [Firebase](https://firebase.google.com) project and depending on the platform you want to:
 

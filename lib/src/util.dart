@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
+import 'package:insighthub/model/insight.dart';
 
 /// Extension with one [toShortString] method
 extension RoleToShortString on types.Role {
@@ -126,4 +127,66 @@ Future<types.Room> processRoomDocument(
   }
 
   return types.Room.fromJson(data);
+}
+
+/// Returns a list of [Insights] created from Firebase query.
+/// If room has 2 participants, sets correct room name and image.
+Future<List<Insight>> processInsightRoomsQuery(
+  User firebaseUser,
+  FirebaseFirestore instance,
+  QuerySnapshot<Map<String, dynamic>> query,
+  String usersCollectionName,
+) async {
+  final futures = query.docs.map(
+    (doc) => processInsightRoomDocument(
+      doc,
+      firebaseUser,
+      instance,
+      usersCollectionName,
+    ),
+  );
+
+  return await Future.wait(futures);
+}
+
+/// Returns a [types.Room] created from Firebase document
+Future<Insight> processInsightRoomDocument(
+  DocumentSnapshot<Map<String, dynamic>> doc,
+  User firebaseUser,
+  FirebaseFirestore instance,
+  String usersCollectionName,
+) async {
+  final data = doc.data()!;
+
+  data['createdAt'] = data['createdAt']?.millisecondsSinceEpoch;
+  data['id'] = doc.id;
+  data['updatedAt'] = data['updatedAt']?.millisecondsSinceEpoch;
+
+  var imageUrl = data['files'] as List<String>?;
+  var name = data['name'] as String?;
+  var text = data['text'] as String?;
+  final type = data['type'] as String;
+
+  data['files'] = imageUrl;
+  data['name'] = name;
+
+  if (data['lastMessages'] != null) {
+    final lastMessages = data['lastMessages'].map((lm) {
+      // final author = firebaseUser.(
+      //   (u) => u['id'] == lm['authorId'],
+      //   orElse: () => {'id': lm['authorId'] as String},
+      // );
+
+      lm['author'] = data['createdBy'];
+      lm['createdAt'] = lm['createdAt']?.millisecondsSinceEpoch;
+      lm['id'] = lm['id'] ?? '';
+      lm['updatedAt'] = lm['updatedAt']?.millisecondsSinceEpoch;
+
+      return lm;
+    }).toList();
+
+    data['lastMessages'] = lastMessages;
+  }
+
+  return Insight.fromJson(data.toString());
 }

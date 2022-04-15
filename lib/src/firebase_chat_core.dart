@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter_chat_types/flutter_chat_types.dart' as types;
+import 'package:insighthub/model/insight.dart';
 import 'firebase_chat_core_config.dart';
 import 'util.dart';
 
@@ -50,10 +51,11 @@ class FirebaseChatCore {
   /// a group name. Add an optional [imageUrl] that will be a group avatar
   /// and [metadata] for any additional custom data.
   Future<types.Room> createGroupRoom({
-    String? imageUrl,
+    required String title,
+    required String text,
+    List<String>? files,
     Map<String, dynamic>? metadata,
-    required String name,
-    required List<types.User> users,
+    int likes = 0,
   }) async {
     if (firebaseUser == null) return Future.error('User does not exist');
 
@@ -63,34 +65,23 @@ class FirebaseChatCore {
       config.usersCollectionName,
     );
 
-    final roomUsers = [types.User.fromJson(currentUser)] + users;
-
-    final room = await getFirebaseFirestore()
-        .collection(config.roomsCollectionName)
-        .add({
+    final room = await getFirebaseFirestore().collection('insights').add({
       'createdAt': FieldValue.serverTimestamp(),
-      'imageUrl': imageUrl,
+      'createdBy': firebaseUser!.uid,
+      'text': text,
+      'name': title,
+      'files': files,
+      'likes': likes,
       'metadata': metadata,
-      'name': name,
       'type': types.RoomType.group.toShortString(),
       'updatedAt': FieldValue.serverTimestamp(),
-      'userIds': roomUsers.map((u) => u.id).toList(),
-      'userRoles': roomUsers.fold<Map<String, String?>>(
-        {},
-        (previousValue, user) => {
-          ...previousValue,
-          user.id: user.role?.toShortString(),
-        },
-      ),
     });
 
     return types.Room(
       id: room.id,
-      imageUrl: imageUrl,
       metadata: metadata,
-      name: name,
+      name: title,
       type: types.RoomType.group,
-      users: roomUsers,
     );
   }
 
@@ -243,6 +234,72 @@ class FirebaseChatCore {
               orElse: () => types.User(id: data['authorId'] as String),
             );
 
+            // print(':::::::room.users ::::::');
+            // print(':::::::${room.users} ::::::');
+            // print(':::::::author ::::::');
+            // print(':::::::${author} ::::::');
+
+            data['author'] = author.toJson();
+            data['createdAt'] = data['createdAt']?.millisecondsSinceEpoch;
+            data['id'] = doc.id;
+            data['updatedAt'] = data['updatedAt']?.millisecondsSinceEpoch;
+
+            return [...previousValue, types.Message.fromJson(data)];
+          },
+        );
+      },
+    );
+  }
+
+  /// Returns a stream of replays from Firebase for a given room
+  Stream<List<types.Message>> replays(
+    String room,
+    List<types.User> users, {
+    List<Object?>? endAt,
+    List<Object?>? endBefore,
+    int? limit,
+    List<Object?>? startAfter,
+    List<Object?>? startAt,
+  }) {
+    var query = getFirebaseFirestore()
+        .collection('insights/${room}/replays')
+        .orderBy('createdAt', descending: true);
+
+    if (endAt != null) {
+      query = query.endAt(endAt);
+    }
+
+    if (endBefore != null) {
+      query = query.endBefore(endBefore);
+    }
+
+    if (limit != null) {
+      query = query.limit(limit);
+    }
+
+    if (startAfter != null) {
+      query = query.startAfter(startAfter);
+    }
+
+    if (startAt != null) {
+      query = query.startAt(startAt);
+    }
+
+    return query.snapshots().map(
+      (snapshot) {
+        return snapshot.docs.fold<List<types.Message>>(
+          [],
+          (previousValue, doc) {
+            final data = doc.data();
+            final author = users.firstWhere(
+              (u) => u.id == data['authorId'],
+              orElse: () => types.User(id: data['authorId'] as String),
+            );
+
+            // print(':::::::room.users ::::::');
+            // print(':::::::${users} ::::::');
+            // print(':::::::author ::::::');
+            // print(':::::::${author} ::::::');
             data['author'] = author.toJson();
             data['createdAt'] = data['createdAt']?.millisecondsSinceEpoch;
             data['id'] = doc.id;
@@ -258,7 +315,6 @@ class FirebaseChatCore {
   /// Returns a stream of changes in a room from Firebase
   Stream<types.Room> room(String roomId) {
     final fu = firebaseUser;
-
     if (fu == null) return const Stream.empty();
 
     return getFirebaseFirestore()
@@ -267,6 +323,24 @@ class FirebaseChatCore {
         .snapshots()
         .asyncMap(
           (doc) => processRoomDocument(
+            doc,
+            fu,
+            getFirebaseFirestore(),
+            config.usersCollectionName,
+          ),
+        );
+  }
+
+  Stream<Insight> insight(String roomId) {
+    final fu = firebaseUser;
+    if (fu == null) return const Stream.empty();
+
+    return getFirebaseFirestore()
+        .collection('insights')
+        .doc(roomId)
+        .snapshots()
+        .asyncMap(
+          (doc) => processInsightRoomDocument(
             doc,
             fu,
             getFirebaseFirestore(),
@@ -295,6 +369,29 @@ class FirebaseChatCore {
             .collection(config.roomsCollectionName)
             .where('userIds', arrayContains: fu.uid)
             .orderBy('updatedAt', descending: true)
+        : getFirebaseFirestore()
+            .collection(config.roomsCollectionName)
+            .where('userIds', arrayContains: fu.uid);
+
+    return collection.snapshots().asyncMap(
+          (query) => processRoomsQuery(
+            fu,
+            getFirebaseFirestore(),
+            query,
+            config.usersCollectionName,
+          ),
+        );
+  }
+
+  Stream<List<types.Room>> insights({bool orderByUpdatedAt = false}) {
+    final fu = firebaseUser;
+
+    if (fu == null) return const Stream.empty();
+
+    final collection = orderByUpdatedAt
+        ? getFirebaseFirestore()
+            .collection('insights')
+            .orderBy('likes', descending: true)
         : getFirebaseFirestore()
             .collection(config.roomsCollectionName)
             .where('userIds', arrayContains: fu.uid);
@@ -352,6 +449,57 @@ class FirebaseChatCore {
 
       await getFirebaseFirestore()
           .collection('${config.roomsCollectionName}/$roomId/messages')
+          .add(messageMap);
+    }
+  }
+
+  /// Sends a message to the Firestore. Accepts any partial message and a
+  /// room ID. If arbitraty data is provided in the [partialMessage]
+  /// does nothing.
+  void sendInsightMessage(
+      {required partialMessage, required String roomId}) async {
+    if (firebaseUser == null) return;
+
+    types.Message? message;
+    if (partialMessage is types.PartialCustom) {
+      message = types.CustomMessage.fromPartial(
+        author: types.User(id: firebaseUser!.uid),
+        id: '',
+        partialCustom: partialMessage,
+      );
+    } else if (partialMessage is types.PartialFile) {
+      message = types.FileMessage.fromPartial(
+        author: types.User(id: firebaseUser!.uid),
+        id: '',
+        partialFile: partialMessage,
+      );
+    } else if (partialMessage is types.PartialImage) {
+      message = types.ImageMessage.fromPartial(
+        author: types.User(id: firebaseUser!.uid),
+        id: '',
+        partialImage: partialMessage,
+      );
+    } else if (partialMessage is types.PartialText) {
+      message = types.TextMessage.fromPartial(
+        author: types.User(id: firebaseUser!.uid),
+        id: '',
+        partialText: partialMessage,
+      );
+    }
+    final currentUser = await fetchUser(
+      getFirebaseFirestore(),
+      firebaseUser!.uid,
+      config.usersCollectionName,
+    );
+
+    if (message != null) {
+      final messageMap = message.toJson();
+      messageMap.removeWhere((key, value) => key == 'author' || key == 'id');
+      messageMap['authorId'] = firebaseUser!.uid;
+      messageMap['createdAt'] = FieldValue.serverTimestamp();
+      messageMap['updatedAt'] = FieldValue.serverTimestamp();
+      await getFirebaseFirestore()
+          .collection('insights/${roomId}/replays')
           .add(messageMap);
     }
   }
