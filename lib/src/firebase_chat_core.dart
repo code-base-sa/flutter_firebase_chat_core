@@ -78,11 +78,11 @@ class FirebaseChatCore {
     });
 
     return types.Room(
-      id: room.id,
-      metadata: metadata,
-      name: title,
-      type: types.RoomType.group,
-    );
+        id: room.id,
+        metadata: metadata,
+        name: title,
+        type: types.RoomType.group,
+        users: []);
   }
 
   /// Creates a direct chat for 2 people. Add [metadata] for any additional
