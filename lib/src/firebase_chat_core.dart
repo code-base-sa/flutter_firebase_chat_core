@@ -56,6 +56,7 @@ class FirebaseChatCore {
     List<String>? files,
     Map<String, dynamic>? metadata,
     int likes = 0,
+    Map like = const <String, Map<int, List<String>>>{},
   }) async {
     if (firebaseUser == null) return Future.error('User does not exist');
 
@@ -72,6 +73,7 @@ class FirebaseChatCore {
       'name': title,
       'files': files,
       'likes': likes,
+      'like': like,
       'metadata': metadata,
       'type': types.RoomType.group.toShortString(),
       'updatedAt': FieldValue.serverTimestamp(),
